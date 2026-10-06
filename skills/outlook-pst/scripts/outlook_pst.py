@@ -39,6 +39,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -85,10 +86,19 @@ WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10
 warnings_seen = 0
 
 
+def terminal_text(value: object) -> str:
+    """Keep untrusted fields on one terminal line without interpreting control characters."""
+    return "".join(
+        (f"\\x{ord(char):02x}" if ord(char) < 256 else f"\\u{ord(char):04x}")
+        if unicodedata.category(char) in {"Cc", "Cf", "Zl", "Zp"} else char
+        for char in str(value)
+    )
+
+
 def warn(message: str) -> None:
     global warnings_seen
     warnings_seen += 1
-    print(f"warning: {message}", file=sys.stderr)
+    print(f"warning: {terminal_text(message)}", file=sys.stderr)
 
 
 @dataclass
@@ -190,7 +200,8 @@ def print_records(records: Iterator[Record], fmt: str) -> int:
             else:
                 when = rec.date.astimezone().strftime("%Y-%m-%d %H:%M") if rec.date else "-" * 16
                 clip = "@" if rec.attachments else " "
-                print(f"{rec.id}\t{when}\t{clip}\t{rec.sender[:30]:30}\t{rec.subject[:70]}\t[{rec.folder}]")
+                print(f"{terminal_text(rec.id)}\t{when}\t{clip}\t{terminal_text(rec.sender[:30]):30}\t"
+                      f"{terminal_text(rec.subject[:70])}\t[{terminal_text(rec.folder)}]")
             count += 1
     print(f"{count} message(s)", file=sys.stderr)
     return count
@@ -286,6 +297,10 @@ RTF_TOKEN = re.compile(rb"\\([a-zA-Z]+)(-?\d+)? ?|\\'([0-9a-fA-F]{2})|\\(.)|([{}
 RTF_SKIPPED_DESTINATIONS = {b"fonttbl", b"colortbl", b"stylesheet", b"info", b"pict", b"object", b"header", b"footer"}
 
 
+class RtfParseError(ValueError):
+    """An invalid RTF control prevents a trustworthy body reconstruction."""
+
+
 def rtf_to_body(rtf: bytes) -> tuple[str, str]:
     """Return ("html", ...) for HTML-encapsulated RTF ([MS-OXRTFEX] \\fromhtml1), else ("text", ...).
 
@@ -309,6 +324,14 @@ def rtf_to_body(rtf: bytes) -> tuple[str, str]:
         suppressed, skipped, in_tag, _ = stack[-1]
         return not skipped and (in_tag or not suppressed)
 
+    def parameter(word: bytes, arg: bytes | None) -> int:
+        try:
+            if arg is None:
+                raise ValueError
+            return int(arg)
+        except ValueError as exc:
+            raise RtfParseError(f"RTF \\{word.decode()} requires a numeric parameter") from exc
+
     for token in RTF_TOKEN.finditer(rtf):
         word, arg, hex_byte, symbol, brace, _newline, text = token.groups()  # raw newlines carry no text in RTF
         if hex_byte:
@@ -318,6 +341,14 @@ def rtf_to_body(rtf: bytes) -> tuple[str, str]:
                 pending.append(int(hex_byte, 16))
             continue
         flush()
+        if skip_chars and brace:
+            skip_chars = 0  # A scope delimiter ends an incomplete Unicode fallback.
+        elif skip_chars and (word or symbol):
+            # ceiling: binary Unicode fallbacks need a byte-aware RTF tokenizer before support.
+            if word == b"bin":
+                raise RtfParseError("binary RTF Unicode fallback is unsupported")
+            skip_chars -= 1  # Each control word or symbol counts as one fallback character.
+            continue
         if brace == b"{":
             stack.append(list(stack[-1]))
         elif brace == b"}":
@@ -326,8 +357,9 @@ def rtf_to_body(rtf: bytes) -> tuple[str, str]:
         elif symbol:
             if symbol == b"*":
                 stack[-1][1] = True  # unknown destination unless the next word is \htmltag
-            elif emitting() and symbol in b"\\{}":
-                out.append(symbol.decode())
+            elif symbol in (b"\\", b"{", b"}", b"~", b"_", b"-"):
+                if emitting():
+                    out.append({b"~": "\u00a0", b"_": "\u2011", b"-": "\u00ad"}.get(symbol, symbol.decode()))
         elif word:
             state = stack[-1]
             if word == b"htmltag":
@@ -337,9 +369,12 @@ def rtf_to_body(rtf: bytes) -> tuple[str, str]:
             elif word == b"htmlrtf":
                 state[0] = arg != b"0"
             elif word == b"uc":
-                state[3] = int(arg or 1)
+                value = parameter(word, arg)
+                if value < 0:
+                    raise RtfParseError("RTF \\uc requires a non-negative parameter")
+                state[3] = value
             elif word == b"u" and emitting():
-                out.append(chr(int(arg) % 65536))
+                out.append(chr(parameter(word, arg) % 65536))
                 skip_chars = state[3]
             elif word in (b"par", b"line") and emitting():
                 out.append("\r\n" if is_html else "\n")
@@ -468,12 +503,14 @@ class PffMessage(MessageView):
 
     def attachments(self) -> Iterator[tuple[str, bytes | None]]:
         """Yield (filename, payload); payload is None when libpff cannot read it (e.g. an embedded message)."""
-        for index, name in enumerate(self.attachment_names()):
+        for index in range(self.msg.number_of_attachments):
+            name = f"attachment-{index + 1}"
             try:
                 attachment = self.msg.get_attachment(index)
+                name = attachment.long_filename or name
                 yield name, attachment.read_buffer(attachment.size) if attachment.size else b""
             except OSError as exc:
-                warn(f"message {self.id}: attachment {name!r} not readable ({exc})")
+                warn(f"message {self.id}: attachment #{index + 1} {name!r} not readable ({exc})")
                 yield name, None
 
 
@@ -532,9 +569,9 @@ def open_source(path: Path, via: str) -> Iterator[PffSource | ComSource]:
             sys.exit(f"only a .pst can be attached; {path.name} must belong to the running Outlook profile")
         ns.AddStoreEx(str(path), OL_STORE_UNICODE)
         store = store_for_path(ns, path)
-        print(f"attached {path.name} to Outlook for this read; it is detached afterwards", file=sys.stderr)
+        print(terminal_text(f"attached {path.name} to Outlook for this read; it is detached afterwards"), file=sys.stderr)
     else:
-        print(f"{path.name} is open in Outlook; reading it through Outlook", file=sys.stderr)
+        print(terminal_text(f"{path.name} is open in Outlook; reading it through Outlook"), file=sys.stderr)
     try:
         yield ComSource(store)
     finally:
@@ -551,7 +588,7 @@ def select(source, args: argparse.Namespace) -> Iterator[tuple[Record, MessageVi
                 rec = view.record()
                 if matches(rec, args, view.text):
                     yield rec, view
-            except OSError as exc:
+            except (OSError, RtfParseError) as exc:
                 warn(f"skipped message in {view.folder!r}: {exc}")
     return limited(generate(), args.limit)
 
@@ -560,7 +597,7 @@ def cmd_tree(args: argparse.Namespace) -> None:
     with open_source(args.file, args.via) as source:
         total = 0
         for depth, name, count in source.folders():
-            print(f"{'  ' * depth}{name}  [{count}]")
+            print(f"{'  ' * depth}{terminal_text(name)}  [{count}]")
             total += count
         print(f"{total} message(s); {source.note()}", file=sys.stderr)
 
@@ -679,15 +716,23 @@ def cmd_export(args: argparse.Namespace) -> None:
             manifest.writeheader()
             for rec, view in select(source, args):
                 folder_dir = out.joinpath(*(safe_name(part) for part in rec.folder.split("/") if part))
-                if args.format == "eml":
-                    write_file(folder_dir / f"{rec.id}.eml", build_eml(rec, view), manifest, rec, "eml", out)
-                else:
-                    write_message_dir(folder_dir / f"Message{rec.id}", rec, view, manifest, out)
+                try:
+                    if args.format == "eml":
+                        payload = build_eml(rec, view)
+                        write_file(folder_dir / f"{rec.id}.eml", payload, manifest, rec, "eml", out)
+                    else:
+                        # Validate the body before writing any part of this message.
+                        bodies = view.bodies()
+                        write_message_dir(folder_dir / f"Message{rec.id}", rec, view, manifest, out, bodies)
+                except RtfParseError as exc:
+                    warn(f"skipped message {rec.id}: {exc}")
+                    continue
                 count += 1
-    print(f"exported {count} message(s) to {out}", file=sys.stderr)
+    print(terminal_text(f"exported {count} message(s) to {out}"), file=sys.stderr)
 
 
-def write_message_dir(target: Path, rec: Record, view: MessageView, manifest: csv.DictWriter, out: Path) -> None:
+def write_message_dir(target: Path, rec: Record, view: MessageView, manifest: csv.DictWriter, out: Path,
+                      bodies: tuple[str, str] | None = None) -> None:
     """pffexport-style layout: one folder per message with headers, bodies, recipients, attachments."""
     summary = "\n".join(f"{k}: {v}" for k, v in rec.as_row().items()) + "\n"
     write_file(target / "Message.txt", summary.encode("utf-8"), manifest, rec, "summary", out)
@@ -695,7 +740,7 @@ def write_message_dir(target: Path, rec: Record, view: MessageView, manifest: cs
     write_file(target / "Recipients.txt", recipients.encode("utf-8"), manifest, rec, "recipients", out)
     if view.headers():
         write_file(target / "InternetHeaders.txt", view.headers().encode("utf-8"), manifest, rec, "headers", out)
-    plain, html = view.bodies()
+    plain, html = view.bodies() if bodies is None else bodies
     if plain:
         write_file(target / "Body.txt", plain.encode("utf-8"), manifest, rec, "body", out)
     if html:
@@ -731,7 +776,7 @@ def find_store(ns, key: str):
         or (store.FilePath and (store.FilePath.casefold() == absolute or Path(store.FilePath).name.casefold() == wanted))
     ]
     if len(found) != 1:
-        sys.exit(f"{len(found)} stores match {key!r}; run `outlook stores` and pass the exact path")
+        sys.exit(terminal_text(f"{len(found)} stores match {key!r}; run `outlook stores` and pass the exact path"))
     return found[0]
 
 
@@ -746,7 +791,7 @@ def find_folder(store, path: str, create: bool = False):
         if child is None:
             if not create:
                 names = ", ".join(f.Name for f in folder.Folders)
-                sys.exit(f"no folder {part!r} under {folder.FolderPath}; children: {names}")
+                sys.exit(terminal_text(f"no folder {part!r} under {folder.FolderPath}; children: {names}"))
             child = folder.Folders.Add(part)
         folder = child
     return folder
@@ -902,7 +947,7 @@ def select_com(ns, args: argparse.Namespace) -> list[tuple[Record, object]]:
 def cmd_stores(args: argparse.Namespace) -> None:
     for store in outlook_namespace().Stores:
         kind = "pst" if store.ExchangeStoreType == OL_NOT_EXCHANGE and store.FilePath else "exchange"
-        print(f"{store.DisplayName}\t{kind}\t{store.FilePath or '-'}")
+        print(f"{terminal_text(store.DisplayName)}\t{kind}\t{terminal_text(store.FilePath or '-')}")
 
 
 def cmd_attach(args: argparse.Namespace) -> None:
@@ -913,48 +958,56 @@ def cmd_attach(args: argparse.Namespace) -> None:
         sys.exit(f"{path} does not exist; pass --create to make a new PST")
     ns = outlook_namespace()
     ns.AddStoreEx(str(path), OL_STORE_UNICODE)
-    print(f"attached {find_store(ns, str(path)).DisplayName}: {path}")
+    print(terminal_text(f"attached {find_store(ns, str(path)).DisplayName}: {path}"))
 
 
 def cmd_detach(args: argparse.Namespace) -> None:
     ns = outlook_namespace()
     store = find_store(ns, str(args.pst.resolve()))
     if store.ExchangeStoreType != OL_NOT_EXCHANGE or not store.FilePath.lower().endswith(".pst"):
-        sys.exit(f"refusing to detach a non-PST store: {store.DisplayName}")
+        sys.exit(terminal_text(f"refusing to detach a non-PST store: {store.DisplayName}"))
     ns.RemoveStore(store.GetRootFolder())
-    print(f"detached {store.FilePath} (Outlook may keep the file locked until it exits)")
+    print(terminal_text(f"detached {store.FilePath} (Outlook may keep the file locked until it exits)"))
 
 
 def cmd_outlook_list(args: argparse.Namespace) -> None:
     print_records((rec for rec, _ in select_com(outlook_namespace(), args)), args.format)
 
 
-def run_mutation(args: argparse.Namespace, describe: Callable[[object], str], act: Callable[[object], None]) -> None:
-    selection = select_com(outlook_namespace(), args)
+def run_mutation(args: argparse.Namespace, describe: Callable[[object], str], act: Callable[[object], None],
+                 selection: list[tuple[Record, object]] | None = None) -> None:
+    if selection is None:
+        selection = select_com(outlook_namespace(), args)
     verb = "applied" if args.apply else "would"
     for rec, item in selection:
         plan = describe(item)
         if not plan:
             continue
-        print(f"{verb}: {plan} | {rec.subject[:60]} [{rec.folder}]")
         if args.apply:
             act(item)
+        print(f"{verb}: {terminal_text(plan)} | {terminal_text(rec.subject[:60])} "
+              f"[{terminal_text(rec.folder)}] [id={terminal_text(rec.id)}]")
     if not args.apply:
         print(f"dry run over {len(selection)} item(s); re-run with --apply to change them", file=sys.stderr)
 
 
 def cmd_move(args: argparse.Namespace) -> None:
-    store = find_store(outlook_namespace(), args.to_store or args.store)
+    ns = outlook_namespace()
+    selection = select_com(ns, args)
+    if not selection:
+        run_mutation(args, lambda _: "", lambda _: None, selection=selection)
+        return
+    store = find_store(ns, args.to_store or args.store)
     if args.apply or not args.create:
         target = find_folder(store, args.to_folder, create=args.create)
         label = target.FolderPath
     else:
         target, label = None, f"{store.DisplayName}/{args.to_folder} (created if missing)"
-    run_mutation(args, lambda item: f"move to {label}", lambda item: item.Move(target))
+    run_mutation(args, lambda item: f"move to {label}", lambda item: item.Move(target), selection=selection)
 
 
 def cmd_edit(args: argparse.Namespace) -> None:
-    if not (args.set_subject or args.replace or args.mark or args.add_category):
+    if not (args.set_subject is not None or args.replace or args.mark or args.add_category):
         sys.exit("nothing to edit: pass --set-subject, --replace, --mark, or --add-category")
 
     def body_field(item) -> str | None:
@@ -963,40 +1016,48 @@ def cmd_edit(args: argparse.Namespace) -> None:
             return None  # rewriting Body would silently drop the RTF formatting
         return "HTMLBody" if body_format == OL_FORMAT_HTML else "Body"
 
+    planned: dict[int, dict] = {}
+
     def describe(item) -> str:
         changes = []
-        if args.set_subject:
+        values = {}
+        subject = item.Subject or ""
+        field_name = body_field(item) if args.replace else None
+        body = (getattr(item, field_name) or "") if field_name else ""
+        if args.set_subject is not None:
+            subject = args.set_subject
+            values["Subject"] = subject
             changes.append(f"subject -> {args.set_subject!r}")
         for old, new in args.replace or []:
-            hits = (item.Subject or "").count(old)
-            field_name = body_field(item)
+            hits = subject.count(old)
+            if hits:
+                subject = subject.replace(old, new)
+                values["Subject"] = subject
             if field_name is None and old in (item.Body or ""):
                 warn(f"RTF body not edited: {item.Subject!r}")
             elif field_name:
-                hits += (getattr(item, field_name) or "").count(old)
+                body_hits = body.count(old)
+                hits += body_hits
+                if body_hits:
+                    body = body.replace(old, new)
+                    values[field_name] = body
             if hits:
                 changes.append(f"replace {old!r}->{new!r} x{hits}")
         if args.mark:
+            values["UnRead"] = args.mark == "unread"
             changes.append(f"mark {args.mark}")
         if args.add_category:
             changes.append(f"category +{args.add_category}")
+            current = [c.strip() for c in (item.Categories or "").split(",") if c.strip()]
+            if args.add_category not in current:
+                values["Categories"] = ", ".join([*current, args.add_category])
+        if args.apply:
+            planned[id(item)] = values
         return ", ".join(changes)
 
     def act(item) -> None:
-        if args.set_subject:
-            item.Subject = args.set_subject
-        for old, new in args.replace or []:
-            if old in (item.Subject or ""):
-                item.Subject = item.Subject.replace(old, new)
-            field_name = body_field(item)
-            if field_name and old in (getattr(item, field_name) or ""):
-                setattr(item, field_name, getattr(item, field_name).replace(old, new))
-        if args.mark:
-            item.UnRead = args.mark == "unread"
-        if args.add_category:
-            current = [c.strip() for c in (item.Categories or "").split(",") if c.strip()]
-            if args.add_category not in current:
-                item.Categories = ", ".join([*current, args.add_category])
+        for name, value in planned.pop(id(item)).items():
+            setattr(item, name, value)
         item.Save()
 
     run_mutation(args, describe, act)
@@ -1023,8 +1084,8 @@ def cmd_outlook_export(args: argparse.Namespace) -> None:
         stamp = rec.date.strftime("%Y-%m-%d_%H%M") if rec.date else "undated"
         path = unique_path(out / f"{stamp} {safe_name(rec.subject or 'no subject', 80)}.msg")
         item.SaveAs(str(path), OL_MSG_UNICODE)
-        print(path)
-    print(f"saved {len(selection)} message(s) to {out}", file=sys.stderr)
+        print(terminal_text(path))
+    print(terminal_text(f"saved {len(selection)} message(s) to {out}"), file=sys.stderr)
 
 
 def outlook_exe() -> str:
@@ -1051,7 +1112,7 @@ def cmd_open(args: argparse.Namespace) -> None:
     if args.select:
         command += ["/recycle", "/select", args.select]
     subprocess.Popen(command)
-    print(" ".join(command))
+    print(terminal_text(" ".join(command)))
 
 
 # --------------------------------------------------------------------------
@@ -1158,7 +1219,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--since must not be after --until")
     if any(old == "" for old, _ in getattr(args, "replace", None) or []):
         parser.error("--replace OLD must not be empty")
-    args.func(args)
+    try:
+        args.func(args)
+    except RtfParseError as exc:
+        parser.exit(1, f"cannot decode message body: {terminal_text(exc)}\n")
     if warnings_seen:
         print(f"{warnings_seen} warning(s); output may be incomplete", file=sys.stderr)
         return 1

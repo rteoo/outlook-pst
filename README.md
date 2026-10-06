@@ -73,6 +73,11 @@ and other devices. Selection is reevaluated on every invocation; use explicit
 IDs when you need to bind approval to particular items. `delete` refuses items
 in Deleted Items and its descendants, where deletion could be permanent.
 
+Each preview and result includes its EntryID. Replacement previews simulate
+subject-setting and replacements in command order. An `applied:` line appears
+only after Outlook reports success; an error can still leave earlier items
+changed. Move destinations are created only after a valid, nonempty selection.
+
 `--via auto` tries libpff, then an already attached Outlook store if locked.
 `--via outlook` may attach a detached PST temporarily; attachment can modify
 the archive even for a read command. Use a closed-Outlook copy with `--via pff`
@@ -91,6 +96,13 @@ JSON, message bodies, headers, and attachments retain their original content.
 HTML and attachments may contain active content: the CLI does not render or
 execute them. Keep exports private. Warnings return exit code 1 and indicate
 incomplete results. See [SECURITY.md](SECURITY.md).
+
+Human-facing tables, previews, and warnings escape terminal control characters;
+JSON values and exported evidence retain their content. Malformed RTF bodies and
+unreadable attachments produce warnings while later readable items continue.
+EML reconstruction currently omits inline attachment Content-ID/related MIME
+metadata, so inline images can lose their association. Sanitized folder names
+can also share an output directory; the manifest retains original folder paths.
 
 ## Build and install the local plugin
 
