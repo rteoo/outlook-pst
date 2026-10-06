@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+.env
+.env.*
+*.pst
+*.ost
+*.msg
+*.eml
+*.zip
+exports/
+fixtures-private/
