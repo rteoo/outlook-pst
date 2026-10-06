@@ -79,6 +79,37 @@ Keep export directories private and controlled. Concurrent hostile replacement
 of their directory tree is outside the supported threat model. CSV protection
 covers common formula prefixes; spreadsheet import behavior varies by client.
 
+## Follow-up review and corrections — 2026-10-06
+
+A separate read-only review reproduced six additional defects in the published
+source. Synthetic regressions and a second patch review support these fixes:
+
+| ID | Priority | Finding | Correction |
+| --- | --- | --- | --- |
+| R10 | P1 | Chained replacements and subject-setting previews disagreed with applied changes. | Simulate edits in command order and apply the computed values; avoid reading bodies for unrelated edits. |
+| R11 | P2 | A failing COM callback printed an `applied:` success line. | Print success only after completion, preserving accurate output for partial runs. |
+| R12 | P2 | Moves created destination folders before rejecting an invalid or empty selection. | Materialize and validate source items before any destination creation. |
+| R13 | P2 | Untrusted subjects, folders, and warning text emitted raw terminal controls. | Escape controls in human-facing output while retaining JSON/evidence values. |
+| R14 | P2 | RTF Unicode fallback escapes emitted the fallback and dropped the next real character. | Consume escaped fallback characters consistently, retaining surrogate handling. |
+| R15 | P2 | Missing RTF numeric parameters raised an uncaught exception and stopped later mail. | Report a controlled parse error; searches and exports skip the malformed message, continue, and return incomplete status. |
+
+Also isolate attachment metadata failures per attachment and include EntryIDs in
+mutation previews/results. The follow-up suite has 51 tests, including relocated
+package checks; selected Ruff checks pass on Windows Python 3.14. Live Outlook,
+successful native archive reads, desktop discovery, and CI for this patch remain
+unverified. No real mail or profile was accessed.
+
+Two useful fidelity improvements remain: retaining inline attachment Content-ID
+and related MIME metadata, and collision-aware export folder mapping. Current
+EML loses inline image associations, and distinct folder names can sanitize to
+the same directory; original folder paths remain in the manifest. A suspected
+plain-body codepage defect was not established against native libpff and was
+excluded from the changes.
+
+Binary Unicode fallback sequences remain unsupported by the focused RTF
+extractor and now produce a controlled incomplete-result error. Escaped text,
+hex bytes, control words, and scope boundaries have regression coverage.
+
 ## Primary references
 
 - [Outlook object classes](https://learn.microsoft.com/en-us/office/vba/api/outlook.olobjectclass)

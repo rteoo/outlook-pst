@@ -15,6 +15,10 @@ not render HTML, execute attachments, send messages, or upload mail.
 
 CSV presentation fields neutralize common spreadsheet formula prefixes. Original
 message bodies, headers, attachments, and JSON output retain their contents.
+Human-facing tables, previews, and warnings escape terminal controls and Unicode
+format controls from mail fields so these fields cannot inject terminal commands
+or forge additional output lines. JSON remains a data interchange format and
+should be parsed before display in a terminal.
 Keep exports in a private directory under your control; this utility does not
 defend against another process concurrently replacing its directory tree.
 

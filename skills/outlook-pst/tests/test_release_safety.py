@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import sys
 import tempfile
 import types
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import test_outlook_pst as fixtures
 
@@ -124,7 +125,7 @@ class ReleaseSafetyTests(unittest.TestCase):
 
     def test_live_preview_does_not_call_the_mutation(self):
         item = types.SimpleNamespace(Subject="Example")
-        record = types.SimpleNamespace(subject="Example", folder="Inbox")
+        record = types.SimpleNamespace(id="A", subject="Example", folder="Inbox")
         act = Mock()
         with patch.object(op, "outlook_namespace"), \
              patch.object(op, "select_com", return_value=[(record, item)]), \
@@ -135,7 +136,7 @@ class ReleaseSafetyTests(unittest.TestCase):
 
     def test_live_apply_calls_the_mutation_once_per_selected_item(self):
         item = types.SimpleNamespace(Subject="Example")
-        record = types.SimpleNamespace(subject="Example", folder="Inbox")
+        record = types.SimpleNamespace(id="A", subject="Example", folder="Inbox")
         act = Mock()
         with patch.object(op, "outlook_namespace"), \
              patch.object(op, "select_com", return_value=[(record, item)]), \
@@ -150,7 +151,7 @@ class ReleaseSafetyTests(unittest.TestCase):
             item = types.SimpleNamespace(Subject="Example", Delete=Mock(),
                                          Parent=types.SimpleNamespace(FolderPath=folder_path,
                                          Store=types.SimpleNamespace(GetDefaultFolder=lambda _: deleted)))
-            record = types.SimpleNamespace(subject="Example", folder=folder_path)
+            record = types.SimpleNamespace(id="A", subject="Example", folder=folder_path)
             with patch.object(op, "outlook_namespace"), \
                  patch.object(op, "select_com", return_value=[(record, item)]), \
                  redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -177,6 +178,159 @@ class ReleaseSafetyTests(unittest.TestCase):
             op.cmd_export(types.SimpleNamespace(out=target))
         self.assertEqual(target.read_bytes(), b"keep")
         source.assert_not_called()
+
+    def test_failed_mutation_logs_only_completed_items(self):
+        selection = [(types.SimpleNamespace(id=value, subject="Example", folder="Inbox"), value)
+                     for value in ("A", "B")]
+        for fail_at in (1, 2):
+            effects = [RuntimeError("failed")] if fail_at == 1 else [None, RuntimeError("failed")]
+            with patch.object(op, "outlook_namespace"), \
+                 patch.object(op, "select_com", return_value=selection), \
+                 redirect_stdout(out := io.StringIO()), self.assertRaises(RuntimeError):
+                op.run_mutation(types.SimpleNamespace(apply=True), lambda _: "mark read", Mock(side_effect=effects))
+            self.assertEqual(out.getvalue().count("applied:"), fail_at - 1)
+            self.assertNotIn("[id=B]", out.getvalue())
+
+    def test_edit_preview_and_apply_share_sequential_replacements(self):
+        for set_subject, expected in ((None, "C"), ("A A", "C C"), ("", "")):
+            for apply in (False, True):
+                item = types.SimpleNamespace(Subject="A", Body="A", BodyFormat=1, Save=Mock())
+                record = types.SimpleNamespace(id="A", subject="A", folder="Inbox")
+                args = types.SimpleNamespace(apply=apply, set_subject=set_subject,
+                        replace=[("A", "B"), ("B", "C")], mark=None, add_category=None)
+                with patch.object(op, "outlook_namespace"), \
+                     patch.object(op, "select_com", return_value=[(record, item)]), \
+                     redirect_stdout(out := io.StringIO()), redirect_stderr(io.StringIO()):
+                    op.cmd_edit(args)
+                hits = 3 if set_subject == "A A" else 1 if set_subject == "" else 2
+                self.assertIn(f"replace 'A'->'B' x{hits}", out.getvalue())
+                self.assertIn(f"replace 'B'->'C' x{hits}", out.getvalue())
+                self.assertIn("[id=A]", out.getvalue())
+                self.assertEqual(item.Subject, expected if apply else "A")
+                self.assertEqual(item.Body, "C" if apply else "A")
+                self.assertEqual(item.Save.call_count, int(apply))
+
+    def test_move_validates_selection_before_creating_destination(self):
+        args = types.SimpleNamespace(apply=True, create=True, store="example.pst",
+                                     to_store=None, to_folder="New", id=["missing"])
+        with patch.object(op, "outlook_namespace"), \
+             patch.object(op, "find_store"), \
+             patch.object(op, "select_com", side_effect=SystemExit("invalid selection")), \
+             patch.object(op, "find_folder") as folder, self.assertRaises(SystemExit):
+            op.cmd_move(args)
+        folder.assert_not_called()
+        with patch.object(op, "outlook_namespace"), \
+             patch.object(op, "find_store"), \
+             patch.object(op, "select_com", return_value=[]), \
+             patch.object(op, "find_folder") as folder:
+            op.cmd_move(args)
+        folder.assert_not_called()
+
+    def test_move_materializes_valid_selection_once_then_moves(self):
+        item = types.SimpleNamespace(Move=Mock())
+        record = types.SimpleNamespace(id="A", subject="Example", folder="Inbox")
+        destination = types.SimpleNamespace(FolderPath="New")
+        args = types.SimpleNamespace(apply=True, create=True, store="example.pst",
+                                     to_store=None, to_folder="New")
+        with patch.object(op, "outlook_namespace"), \
+             patch.object(op, "select_com", return_value=[(record, item)]) as select, \
+             patch.object(op, "find_store"), \
+             patch.object(op, "find_folder", return_value=destination) as folder, \
+             redirect_stdout(io.StringIO()):
+            op.cmd_move(args)
+        select.assert_called_once()
+        self.assertTrue(folder.call_args.kwargs["create"])
+        item.Move.assert_called_once_with(destination)
+
+    def test_terminal_controls_are_escaped_in_human_output_but_json_stays_exact(self):
+        value = "invoice\x1b]0;fake\x07\r\n\t\u202eexe\u2028\u2029"
+        record = op.Record("A", value, value, value, "", "", None, 0)
+        with redirect_stdout(out := io.StringIO()), redirect_stderr(io.StringIO()):
+            op.print_records(iter([record]), "table")
+        self.assertNotIn("\x1b", out.getvalue())
+        self.assertNotIn("\u202e", out.getvalue())
+        self.assertNotIn("\u2028", out.getvalue())
+        self.assertNotIn("\u2029", out.getvalue())
+        self.assertIn(r"\x1b]0;fake\x07\x0d\x0a\x09\u202eexe", out.getvalue())
+        with redirect_stdout(out := io.StringIO()), redirect_stderr(io.StringIO()):
+            op.print_records(iter([record]), "json")
+        self.assertEqual(json.loads(out.getvalue())["subject"], value)
+        with redirect_stderr(err := io.StringIO()):
+            op.warn(value)
+        self.assertNotIn("\x1b", err.getvalue())
+        self.assertEqual(len(err.getvalue().splitlines()), 1)
+        with patch.object(op, "outlook_namespace"), \
+             patch.object(op, "select_com", return_value=[(record, object())]), \
+             redirect_stdout(out := io.StringIO()), redirect_stderr(io.StringIO()):
+            op.run_mutation(types.SimpleNamespace(apply=False), lambda _: value, Mock())
+        self.assertNotIn("\x1b", out.getvalue())
+        self.assertNotIn("\u202e", out.getvalue())
+        self.assertEqual(len(out.getvalue().splitlines()), 1)
+
+    def test_rtf_unicode_fallback_consumes_escaped_characters(self):
+        for fallback in (rb"\{", rb"\}", rb"\\", rb"\~", rb"\_", rb"\-", rb"\'3f", b"?", rb"\tab ", rb"\b "):
+            with self.subTest(fallback=fallback):
+                self.assertEqual(op.rtf_to_body(rb"{\rtf1\ansi\uc1\u233" + fallback + b"X}"), ("text", "éX"))
+        self.assertEqual(op.rtf_to_body(rb"{\rtf1\ansi\uc2\u233\{?X}"), ("text", "éX"))
+        self.assertEqual(op.rtf_to_body(rb"{\rtf1\ansi{\uc1\u233}X}"), ("text", "éX"))
+        with self.assertRaises(op.RtfParseError):
+            op.rtf_to_body(rb"{\rtf1\ansi\uc1\u233\bin1 ?X}")
+
+    def test_malformed_rtf_is_a_controlled_parse_failure(self):
+        for control in (rb"\u hello", rb"\uc hello", rb"\uc-1 hello", b"\\u" + b"1" * 5000):
+            with self.subTest(control=control[:30]), self.assertRaises(op.RtfParseError):
+                op.rtf_to_body(rb"{\rtf1\ansi" + control + b"}")
+
+    def test_malformed_rtf_does_not_stop_search_or_export_of_later_mail(self):
+        pff = fixtures.fixture_file()
+        message = pff.root_folder.folders[0].folders[0].messages[0]
+        message.plain_text_body = b""
+        message.rtf_body = rb"{\rtf1\ansi\u hello}"
+        with patch.object(op, "open_pff", return_value=pff), \
+             redirect_stdout(out := io.StringIO()), redirect_stderr(err := io.StringIO()):
+            self.assertEqual(op.main(["list", str(self.pst), "--text", "archive", "--format", "json"]), 1)
+        self.assertIn('"id": "303"', out.getvalue())
+        self.assertIn("warning:", err.getvalue())
+        for fmt in ("dir", "eml"):
+            target = Path(self.tmp.name) / fmt
+            with patch.object(op, "open_pff", return_value=pff), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(err := io.StringIO()):
+                self.assertEqual(op.main(["export", str(self.pst), str(target), "--format", fmt]), 1)
+            self.assertIn("exported 2 message(s)", err.getvalue())
+            self.assertFalse(any("202" in path.name for path in target.rglob("*")))
+            self.assertTrue(any("303" in path.name for path in target.rglob("*")))
+
+    def test_attachment_metadata_failure_preserves_later_attachments(self):
+        message = fixtures.fixture_file().root_folder.folders[0].folders[1].messages[0]
+        readable = message.attachments[1]
+        message.get_attachment = Mock(side_effect=[OSError("broken metadata"), readable, message.attachments[2]])
+        view = op.PffMessage("Sent", message)
+        with redirect_stderr(err := io.StringIO()):
+            attachments = list(view.attachments())
+        self.assertEqual(attachments[0], ("attachment-1", None))
+        self.assertEqual(attachments[1], ("CON.txt", b"reserved"))
+        self.assertEqual(attachments[2], ("proposta.pdf", b"second copy"))
+        self.assertIn("attachment #1", err.getvalue())
+
+    def test_edits_without_replacements_do_not_read_body(self):
+        class Item:
+            Subject = "Example"
+            Categories = ""
+            Save = Mock()
+
+        for edit in ({"mark": "read"}, {"set_subject": "Changed"}, {"add_category": "Reviewed"}):
+            item = Item()
+            args = types.SimpleNamespace(apply=True, set_subject=None, replace=None,
+                                         mark=None, add_category=None)
+            args.__dict__.update(edit)
+            record = types.SimpleNamespace(id="A", subject="Example", folder="Inbox")
+            with patch.object(Item, "Body", new_callable=PropertyMock, create=True,
+                              side_effect=RuntimeError("body inaccessible")) as body, \
+                 patch.object(op, "outlook_namespace"), \
+                 patch.object(op, "select_com", return_value=[(record, item)]), \
+                 redirect_stdout(io.StringIO()):
+                op.cmd_edit(args)
+            body.assert_not_called()
 
 
 if __name__ == "__main__":

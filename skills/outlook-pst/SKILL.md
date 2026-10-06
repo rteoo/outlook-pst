@@ -94,6 +94,7 @@ live Outlook or archive compatibility. Differences to expect:
 
 1. Run the live command without `--apply`. It prints one `would: ...` line per
    item and changes nothing.
+   Each line includes the EntryID so approval can identify the exact item.
 2. Show the plan to the user. On a real mailbox, get explicit approval before
    re-running with `--apply`. Edits to an `.ost` store sync to the Exchange
    server and reach every device.
@@ -103,6 +104,9 @@ live Outlook or archive compatibility. Differences to expect:
 4. `delete` only moves to Deleted Items. It refuses items already there, where
    a delete would be permanent.
 5. `move --create` makes missing destination folders, but only with `--apply`.
+   It validates a nonempty source selection before creating destination folders.
+6. Replacement previews simulate `--set-subject` followed by all replacements in
+   command order. `applied:` is printed only after Outlook reports success.
 
 ## Reading the output
 
@@ -123,6 +127,11 @@ live Outlook or archive compatibility. Differences to expect:
 - CSV presentation fields prefix formula-like values with an apostrophe for
   spreadsheet safety. JSON and exported message contents retain their values.
   Exports rebuild MIME and are not byte-identical forensic copies of the source.
+- Human-facing fields escape terminal control characters. JSON and evidence
+  values retain their content. Malformed RTF and unreadable attachment metadata
+  generate warnings while later readable items continue.
+- Rebuilt EML does not retain inline attachment Content-ID/related MIME metadata.
+  Sanitized folder names can collide; use the original paths in the manifest.
 
 ## Traps found live
 
