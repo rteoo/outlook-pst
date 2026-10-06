@@ -1,110 +1,174 @@
 # Outlook PST/OST
 
-Read and search local Outlook archives, export messages with hash manifests,
-and preview changes to mail in Classic Outlook. Includes a Python CLI and a
-local skills plugin for Codex. No mail service account or remote server is needed.
+<p align="center">
+  <img src="assets/outlook-pst-icon.png" width="128" alt="Outlook PST mail archive icon">
+</p>
 
-This is an early release. Automated tests use fake backends; native libpff
-loading and invalid-file handling have been checked on Windows. Successful
-reads of real archives and live Outlook mutations are not verified by this
-release's evidence. See [the review](docs/review.md) for fixes and limits.
+<p align="center">
+  Find the email you need. Export it with confidence. Keep your archives local.
+</p>
 
-## Requirements
+<p align="center">
+  <a href="https://github.com/rteoo/outlook-pst/actions/workflows/ci.yml"><img src="https://github.com/rteoo/outlook-pst/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="docs/review.md"><img src="https://img.shields.io/badge/status-early%20release-amber" alt="Early release"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10%2B-blue" alt="Python 3.10 or later"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
 
-Python 3.10 or later. Archive commands use `libpff-python` (imported as `pypff`)
-on Windows, Linux, or macOS. Live commands need Windows, `pywin32`, and Classic
-Outlook. New Outlook has no compatible COM API.
+Have an old `.pst` archive, an `.ost` cache, or mail in Classic Outlook?
+Outlook PST helps you browse folders, find messages by sender or date, and
+export the results. On Windows, you can also choose a mailbox and preview
+changes before applying them.
 
-The examples use an existing `uv` installation to resolve dependencies per run.
-They do not modify a project's dependencies or install packages into host Python.
-Review dependency downloads before running them. CLI help, plugin packaging,
-and all regression tests use only Python's standard library.
+Use it from the command line or as a local skills plugin for Codex. Archive
+commands work with files on your computer and need no mail-service sign-in.
+This is an **early release**; see [platform status and limitations](#platform-status-and-limitations)
+for what has been verified.
 
-## Start with the CLI
+## Highlights
 
-Clone this repository and work from its root:
+- **Find messages quickly:** filter by folder, sender, recipient, subject,
+  body text, date range, or attachments.
+- **Read local archives:** inspect PST/OST files through libpff on Windows,
+  macOS, and Linux.
+- **Choose your mailbox:** list stores in Classic Outlook and select the one
+  you want by name or data-file path.
+- **Export useful files:** rebuild `.eml` messages, export bodies and
+  attachments into folders, or save live Outlook items as `.msg`.
+- **Check exported-file integrity:** archive exports include a CSV manifest
+  with file sizes, MD5, and SHA-256 hashes.
+- **Preview mailbox changes:** move mail, edit text, mark read/unread, add
+  categories, or move items to Deleted Items. Item changes require `--apply`.
+- **Use it with Codex:** build a self-contained local plugin with example
+  prompts and the same Python CLI.
+
+## Quick start
+
+You need **Python 3.10+**. The examples use an existing **uv** installation to
+resolve dependencies per run. Archive access needs `libpff-python`; live Outlook
+access also needs `pywin32`, Windows, and **Classic Outlook**. Review dependency
+downloads before running them. Help, packaging, and tests need only Python's
+standard library.
+
+Clone the repository, then check the available commands:
 
 ```powershell
 git clone https://github.com/rteoo/outlook-pst.git
 cd outlook-pst
 $scriptPath = '.\skills\outlook-pst\scripts\outlook_pst.py'
 python -B $scriptPath --help
-uv run --with libpff-python python $scriptPath tree 'C:\mail\archive.pst' --via pff
-uv run --with libpff-python python $scriptPath list 'C:\mail\archive.pst' --via pff --subject invoice --since 2026-01-01 --limit 20 --format json
-uv run --with libpff-python python $scriptPath show 'C:\mail\archive.pst' 2097188 --via pff
-uv run --with libpff-python python $scriptPath export 'C:\mail\archive.pst' 'C:\mail\export' --via pff --subject invoice --format eml
 ```
 
-On macOS/Linux use `S=./skills/outlook-pst/scripts/outlook_pst.py` and pass `"$S"`
-with your local archive and output paths. Add `--with pywin32` on Windows when
-using Outlook-backed access. JSON listings emit one object per line, not an array.
+### Browse an archive
 
-## Command map
+Replace the example path with your archive. For evidence work, use a copy
+taken while Outlook was closed; `--via pff` keeps access strictly offline.
 
-| Command | Behavior |
-| --- | --- |
-| `tree FILE` | Folder structure and counts |
-| `list FILE` | Filter and list messages as table, JSON Lines, or CSV |
-| `show FILE ID` | Read one message as JSON; `--html` selects its HTML body |
-| `export FILE OUT --format eml` | Rebuild `.eml` messages with transport headers |
-| `export FILE OUT --format dir` | Bodies, headers, recipients, attachments, and hash manifest |
-| `outlook stores` / `outlook list --store S` | Inspect attached stores and MailItems |
-| `outlook move` / `edit` / `delete` | Preview selected changes; apply only with `--apply` |
-| `outlook export --store S OUT` | Save selected items as `.msg` |
-| `outlook attach PST` / `detach PST` | Change the Outlook profile |
-| `outlook open` | Launch Classic Outlook with supported switches |
+```powershell
+uv run --with libpff-python python $scriptPath tree 'C:\mail\archive.pst' --via pff
+```
 
-Selection filters include `--folder`, `--from`, `--to`, `--subject`, `--text`,
-`--since`, `--until`, `--has-attachments`, and positive `--limit`. Dates use local
-calendar days. Live commands support `@inbox`, `@sent`, `@drafts`, `@deleted`,
-`@junk`, `@outbox`, `--recursive`, and explicit `--id`. With `--id`, folder and
-message filters are bypassed; duplicate IDs and non-MailItems are rejected.
+Find the first 20 messages about invoices:
 
-## Outlook previews
+```powershell
+uv run --with libpff-python python $scriptPath list 'C:\mail\archive.pst' --via pff --subject invoice --limit 20 --format json
+```
+
+Read a message using an ID returned by `list`:
+
+```powershell
+uv run --with libpff-python python $scriptPath show 'C:\mail\archive.pst' 2097188 --via pff
+```
+
+JSON listings contain one object per line, making them easy to pipe into other
+tools. On macOS/Linux, set `S=./skills/outlook-pst/scripts/outlook_pst.py` and
+use `"$S"` in place of `$scriptPath`, with your own archive paths.
+
+## Choose a mailbox or account
+
+For mail already available in Classic Outlook, first list its attached stores:
 
 ```powershell
 uv run --with pywin32 python $scriptPath outlook stores
-uv run --with pywin32 python $scriptPath outlook edit --store 'archive.pst' --folder @inbox --subject invoice --limit 10 --mark read
 ```
 
-Inspect the `would:` lines and obtain approval for those exact items before
-rerunning with `--apply`. Exchange-backed changes can synchronize to the server
-and other devices. Selection is reevaluated on every invocation; use explicit
-IDs when you need to bind approval to particular items. `delete` refuses items
-in Deleted Items and its descendants, where deletion could be permanent.
+Then pass the **exact displayed mailbox name** to `--store`:
 
-Each preview and result includes its EntryID. Replacement previews simulate
-subject-setting and replacements in command order. An `applied:` line appears
-only after Outlook reports success; an error can still leave earlier items
-changed. Move destinations are created only after a valid, nonempty selection.
+```powershell
+uv run --with pywin32 python $scriptPath outlook list --store 'Personal Mailbox' --folder @inbox --limit 20 --format json
+```
 
-`--via auto` tries libpff, then an already attached Outlook store if locked.
-`--via outlook` may attach a detached PST temporarily; attachment can modify
-the archive even for a read command. Use a closed-Outlook copy with `--via pff`
-for evidence work. Attaching, detaching, and creating PSTs need separate approval.
+`--store` also accepts a PST/OST filename or full path. Ambiguous matches stop
+with an error. Selection is by Outlook store; an email address works only if it
+matches that store's displayed name. There is no interactive account picker.
+Offline commands select the archive file directly.
 
-## Exports and privacy
+Common folders have shortcuts: `@inbox`, `@sent`, `@drafts`, `@deleted`, `@junk`,
+and `@outbox`. Use `--recursive` to include subfolders. For a cross-mailbox move,
+`--to-store` selects the destination.
 
-Archive export requires a new or empty output directory. `manifest.csv` records
-file size, MD5, and SHA-256; hashes check exported-file integrity, not authenticity.
-Exported MIME is reconstructed and is not a byte-identical source copy. Keep
-the original archive when preserving evidence or checking mail signatures.
-Live `.msg` exports avoid filename collisions and do not produce this manifest.
+## Export the messages you need
 
-CSV presentation fields prefix common formula-like values with an apostrophe.
-JSON, message bodies, headers, and attachments retain their original content.
-HTML and attachments may contain active content: the CLI does not render or
-execute them. Keep exports private. Warnings return exit code 1 and indicate
-incomplete results. See [SECURITY.md](SECURITY.md).
+Choose a **new or empty output directory** and export matching messages as EML:
 
-Human-facing tables, previews, and warnings escape terminal control characters;
-JSON values and exported evidence retain their content. Malformed RTF bodies and
-unreadable attachments produce warnings while later readable items continue.
-EML reconstruction currently omits inline attachment Content-ID/related MIME
-metadata, so inline images can lose their association. Sanitized folder names
-can also share an output directory; the manifest retains original folder paths.
+```powershell
+uv run --with libpff-python python $scriptPath export 'C:\mail\archive.pst' 'C:\mail\export' --via pff --subject invoice --format eml
+```
 
-## Build and install the local plugin
+| Format | What you get |
+| --- | --- |
+| `--format eml` | Reconstructed mail messages with transport headers, bodies, and attachments |
+| `--format dir` | A folder per message containing its summary, recipients, headers, bodies, and attachments |
+| `outlook export --store S OUT` | Live Outlook items saved as `.msg` files |
+
+Archive exports write `manifest.csv` with the original folder path, message ID,
+file path, size, MD5, and SHA-256. Live `.msg` exports avoid filename collisions
+but do not generate that manifest.
+
+Hashes check exported-file integrity. They do not authenticate a message;
+reconstructed EML is not a byte-identical copy. Keep the original archive when
+preserving evidence or checking mail signatures.
+
+## Preview changes before applying them
+
+Start with a dry run. This example previews marking up to ten matching messages
+as read:
+
+```powershell
+uv run --with pywin32 python $scriptPath outlook edit --store 'Personal Mailbox' --folder @inbox --subject invoice --limit 10 --mark read
+```
+
+Review the `would:` lines, including each item's EntryID. Once the exact items
+are approved, use their IDs and add `--apply`:
+
+```powershell
+uv run --with pywin32 python $scriptPath outlook edit --store 'Personal Mailbox' --id 'ENTRY_ID_FROM_LIST' --mark read --apply
+```
+
+Repeat `--id` for more items. Explicit IDs bypass folder and message filters;
+duplicate IDs and non-mail items are rejected. Filter selections are evaluated
+again on every invocation, so IDs help keep approval tied to particular items.
+
+| Action | Options |
+| --- | --- |
+| Move messages | `outlook move --to-folder 'Archive'`; optional `--to-store` and `--create` |
+| Change text | `outlook edit --set-subject 'New subject'` or `--replace OLD NEW` |
+| Update read state | `outlook edit --mark read` or `--mark unread` |
+| Add a category | `outlook edit --add-category 'Reviewed'` |
+| Move to Deleted Items | `outlook delete`; refuses items already there or in its descendants |
+
+All these commands require `--store` and default to a preview. Destination
+folders are created only after a valid, nonempty selection with `--apply`.
+Replacement previews follow command order; HTML replacements edit raw HTML,
+and RTF bodies are skipped with a warning to preserve formatting.
+
+**Exchange-backed changes can sync to the server and other devices.** Changes
+are not transactional: if a later operation fails, earlier ones may remain
+applied. An `applied:` line is printed only after Outlook reports success.
+
+## Use it as a Codex plugin
+
+Build the local package, then register and install it with the Codex CLI:
 
 ```powershell
 python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.1.0
@@ -112,26 +176,92 @@ codex plugin marketplace add ./dist/plugin-0.1.0
 codex plugin add outlook-pst@outlook-pst-local
 ```
 
-Then start a new chat and select **Outlook PST/OST**. The builder emits a
-self-contained plugin, a ZIP with its hidden compatibility manifest, and a
-separate local marketplace catalog. The root portable manifest and Codex
-overlay are checked for agreement. Packaging copies only an explicit allowlist,
-includes the MIT license, and refuses non-empty output directories.
+Start a new chat and select **Outlook PST/OST**. Try prompts such as:
 
-Installation changes local Codex configuration; it is not performed by the
-builder. This plugin needs a local execution host for files and processes.
-Publishing or saving it to an account does not provide remote file access.
-See the [OpenAI packaging guide](https://developers.openai.com/plugins/build/plugins).
+> Find messages about invoices in my local PST archive from January onward.
+>
+> Export the matching messages to my chosen local folder with a hash manifest.
+>
+> Show me a preview of marking these Outlook messages as read.
 
-## Development
+The builder produces a self-contained plugin, ZIP, and separate marketplace
+catalog. It includes only allowlisted source files and refuses nonempty output
+directories. Installation changes local Codex configuration; the builder itself
+does not install anything. The plugin needs a local execution host to access
+files and processes.
+
+See the [OpenAI packaging guide](https://developers.openai.com/plugins/build/plugins)
+for the package format and installation workflow.
+
+## Command reference
+
+| Command | Purpose |
+| --- | --- |
+| `tree FILE` | Browse folders and message counts |
+| `list FILE` | Find messages; output table, JSON Lines, or CSV |
+| `show FILE ID` | Read one message as JSON; add `--html` for its HTML body |
+| `export FILE OUT` | Export selected archive messages and a hash manifest |
+| `outlook stores` / `outlook list --store S` | Discover mailboxes and list live messages |
+| `outlook move` / `edit` / `delete` | Preview or apply changes to selected MailItems |
+| `outlook export --store S OUT` | Save live items as `.msg` |
+| `outlook attach PST` / `detach PST` | Attach or detach a PST from the Outlook profile |
+| `outlook open` | Launch Classic Outlook; supports `--profile`, `--select`, `--msg`, and `--safe` |
+
+Shared filters: `--from`, `--to`, `--subject`, `--text`, `--since`, `--until`,
+`--has-attachments`, and positive `--limit`. Dates use local calendar days.
+For archive commands, `--folder` matches part of a path; for live commands,
+it selects an exact folder path or one of the shortcuts above.
+
+## Data safety and privacy
+
+Mail and exports stay in the local destinations you choose; the CLI does not
+send messages or upload mail. Keep exported content private. HTML and
+attachments can contain active content, which the CLI does not render or execute.
+
+`--via auto` first tries libpff and, when locked, can read a store already attached
+to Outlook. `--via outlook` may temporarily attach a PST; attachment can modify
+the archive. Attaching, detaching, and creating PSTs require separate approval.
+Use `--via pff` for strict offline evidence access.
+
+Human-facing output escapes terminal controls. CSV presentation fields neutralize
+common spreadsheet formula prefixes; JSON and exported evidence preserve their
+values. Warnings return exit code 1 and mean results may be incomplete. Report
+them before relying on an export. See [SECURITY.md](SECURITY.md).
+
+## Platform status and limitations
+
+| Mode | Requirements |
+| --- | --- |
+| Archive reads and exports | Windows, macOS, or Linux; Python 3.10+ and `libpff-python` |
+| Live Outlook and locked-file access | Windows, `pywin32`, and Classic Outlook; New Outlook has no compatible COM API |
+| Help, tests, and plugin packaging | Python 3.10+ standard library |
+
+Tests use synthetic libpff and COM backends. CI covers Windows, Linux, and macOS
+on Python 3.10 and 3.14. Native libpff loading and invalid-file rejection were
+checked on Windows; **successful real-archive reads, live Outlook changes, and
+desktop plugin loading remain unverified**. See [the review](docs/review.md).
+
+Large live mailboxes can be slow to scan. MIME assembly holds attachments in
+memory, and RTF extraction is intentionally focused rather than a full RTF
+interpreter. Malformed bodies and unreadable attachments produce warnings while
+later readable items continue. Rebuilt EML currently omits inline attachment
+Content-ID/related MIME metadata, and sanitized folder names can share an output
+directory; original paths remain in the manifest.
+
+## Develop and build
+
+Source and tests live under [skills/outlook-pst](skills/outlook-pst). Run:
 
 ```powershell
 python -B -W error::ResourceWarning -m unittest discover -s skills/outlook-pst/tests -v
+python -m ruff check --no-cache skills/outlook-pst
+python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.1.0
 ```
 
-All tests use temporary directories that clean up on failure. COM tests use
-pure Python fakes and run on every OS without Outlook or pywin32. CI runs the
-suite and plugin build on Windows, Linux, and macOS with Python 3.10 and 3.14.
-Native library and successful live Outlook behavior require separate validation.
+Ruff is optional and must already be installed. Tests use temporary directories
+that clean up on failure and never access a mailbox. Native and live validation
+require a separately approved scratch archive.
 
-MIT licensed. Native dependencies have their own licenses.
+## License
+
+Outlook PST is released under the [MIT License](LICENSE).
