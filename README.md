@@ -1,7 +1,7 @@
 # Outlook PST/OST
 
 <p align="center">
-  <img src="assets/outlook-pst-icon.png" width="128" alt="Outlook PST mail archive icon">
+  <img src="https://raw.githubusercontent.com/rteoo/outlook-pst/main/assets/outlook-pst-icon.png" width="128" alt="Outlook PST mail archive icon">
 </p>
 
 <p align="center">
