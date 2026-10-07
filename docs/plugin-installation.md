@@ -46,6 +46,22 @@ Python and uv must already be available on the execution host. Archive reads nee
 approve missing dependencies before downloading them. New Outlook does not support
 the COM API. The plugin never installs dependencies automatically.
 
+## Archive upload dialogs
+
+For **Add plugin** or **Upload local plugin**, use the release asset
+`outlook-pst-plugin-v0.1.0.zip`. This standalone archive contains one
+`outlook-pst/` directory with the root manifest and hidden client manifests.
+The builder's `outlook-pst-0.2.0.zip` has the same standalone layout.
+
+The separate release asset `outlook-pst-v0.1.0.zip` is a marketplace bundle. It
+adds an outer directory containing catalogs and the plugin directory beneath it.
+Use it after extraction for CLI marketplace registration. Uploading that outer
+bundle as a plugin hides `.claude-plugin/plugin.json` one directory too deep and
+can produce a missing-manifest error.
+
+Both release assets are built from the unchanged v0.1.0 tag, whose plugin
+metadata declares version 0.2.0. See the README for direct download links.
+
 ## Codex
 
 From the source checkout:
