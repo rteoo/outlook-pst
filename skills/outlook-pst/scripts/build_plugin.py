@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the local Outlook PST/OST skills plugin from repository source.
 
-Usage: python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
+Usage: python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.1
 Cron: none; manual packaging only.
 Dependencies: Python 3.10+ standard library; no mail backends needed.
 Output: a self-contained plugin, ZIP, and separate local marketplace catalog.

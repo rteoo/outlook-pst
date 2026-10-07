@@ -10,13 +10,13 @@ host that can access your chosen archive or Classic Outlook.
 From a source checkout, with an existing Python 3.10+ installation:
 
 ```powershell
-python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
+python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.1
 ```
 
 Use a new or empty output directory. The output layout is:
 
 ```text
-plugin-0.2.0/
+plugin-0.2.1/
   .agents/plugins/marketplace.json
   .claude-plugin/marketplace.json
   .cursor-plugin/marketplace.json
@@ -31,7 +31,7 @@ plugin-0.2.0/
     assets/
     docs/
     skills/outlook-pst/
-  outlook-pst-0.2.0.zip
+  outlook-pst-0.2.1.zip
 ```
 
 Marketplace catalogs sit beside the plugin and are not inside the ZIP. Register
@@ -49,25 +49,25 @@ the COM API. The plugin never installs dependencies automatically.
 ## Archive upload dialogs
 
 For **Add plugin** or **Upload local plugin**, use the release asset
-`outlook-pst-plugin-v0.1.0.zip`. This standalone archive contains one
+`outlook-pst-plugin.zip`. This standalone archive contains one
 `outlook-pst/` directory with the root manifest and hidden client manifests.
-The builder's `outlook-pst-0.2.0.zip` has the same standalone layout.
+The builder's `outlook-pst-0.2.1.zip` has the same standalone layout.
 
-The separate release asset `outlook-pst-v0.1.0.zip` is a marketplace bundle. It
-adds an outer directory containing catalogs and the plugin directory beneath it.
-Use it after extraction for CLI marketplace registration. Uploading that outer
-bundle as a plugin hides `.claude-plugin/plugin.json` one directory too deep and
-can produce a missing-manifest error.
+The separate release asset `outlook-pst-marketplace.zip` is a marketplace bundle. It
+contains marketplace catalogs alongside the `outlook-pst/` plugin directory.
+Use it after extraction for CLI marketplace registration. For direct plugin
+uploads, use the standalone archive so the importer sees a single plugin root.
 
-Both release assets are built from the unchanged v0.1.0 tag, whose plugin
-metadata declares version 0.2.0. See the README for direct download links.
+Both release assets are built from the same release commit. Starting with
+v0.2.1, release tags match the packaged plugin version. See the README for
+version-independent links to the latest downloads.
 
 ## Codex
 
 From the source checkout:
 
 ```powershell
-codex plugin marketplace add ./dist/plugin-0.2.0
+codex plugin marketplace add ./dist/plugin-0.2.1
 codex plugin add outlook-pst@outlook-pst-local
 codex plugin list --marketplace outlook-pst-local --json
 ```
@@ -89,14 +89,14 @@ Reference: [OpenAI packaging and marketplaces](https://developers.openai.com/plu
 For one session, without registering a marketplace:
 
 ```powershell
-claude plugin validate ./dist/plugin-0.2.0/outlook-pst --strict
-claude --plugin-dir ./dist/plugin-0.2.0/outlook-pst
+claude plugin validate ./dist/plugin-0.2.1/outlook-pst --strict
+claude --plugin-dir ./dist/plugin-0.2.1/outlook-pst
 ```
 
 Invoke `/outlook-pst:outlook-pst`. For persistent installation:
 
 ```powershell
-claude plugin marketplace add ./dist/plugin-0.2.0
+claude plugin marketplace add ./dist/plugin-0.2.1
 claude plugin install outlook-pst@outlook-pst-local
 claude plugin details outlook-pst
 ```
@@ -120,7 +120,7 @@ References: [manifest](https://code.claude.com/docs/en/plugins-reference),
 The Cursor Agent CLI can load the package for one session:
 
 ```powershell
-cursor --plugin-dir ./dist/plugin-0.2.0/outlook-pst
+cursor --plugin-dir ./dist/plugin-0.2.1/outlook-pst
 ```
 
 For local development in the Cursor IDE, copy the **contents of the packaged
@@ -198,7 +198,7 @@ Checked on Windows on 2026-10-07:
 | Ruff | Passed |
 | Agent Plugins 1.0 schema | Repository and packaged root manifests passed |
 | Claude Code 2.1.287 | Strict package/catalog validation passed; isolated marketplace registration and installation passed; component inventory reports exactly one `outlook-pst` skill |
-| Codex 0.159.0 CLI | Isolated marketplace registration and installation passed; plugin inventory reports version 0.2.0 installed and enabled; session execution remains unverified |
+| Codex 0.159.0 CLI | Isolated marketplace registration and installation passed; plugin inventory reported version 0.2.0 installed and enabled; session execution remains unverified |
 | Cursor Agent CLI 2026.08.11-e8db854 | Session-only `--plugin-dir` option confirmed; skill loading and IDE installation remain unverified |
 | OpenClaw | No local executable available; bundle detection and Gateway loading remain unverified |
 

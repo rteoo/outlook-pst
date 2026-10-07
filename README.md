@@ -46,28 +46,27 @@ for what has been verified.
 
 ## Download the plugin
 
-Choose the archive for your installation method from
-[release v0.1.0](https://github.com/rteoo/outlook-pst/releases/tag/v0.1.0):
+Choose an archive from the [latest release](https://github.com/rteoo/outlook-pst/releases/latest):
 
 | Installation method | Download |
 | --- | --- |
-| **Add plugin / Upload local plugin dialog** | [Standalone plugin ZIP](https://github.com/rteoo/outlook-pst/releases/download/v0.1.0/outlook-pst-plugin-v0.1.0.zip) · [SHA-256](https://github.com/rteoo/outlook-pst/releases/download/v0.1.0/outlook-pst-plugin-v0.1.0.zip.sha256) |
-| **CLI marketplace registration** | [Marketplace bundle ZIP](https://github.com/rteoo/outlook-pst/releases/download/v0.1.0/outlook-pst-v0.1.0.zip) · [SHA-256](https://github.com/rteoo/outlook-pst/releases/download/v0.1.0/outlook-pst-v0.1.0.zip.sha256) |
+| **Add plugin / Upload local plugin dialog** | [Standalone plugin ZIP](https://github.com/rteoo/outlook-pst/releases/latest/download/outlook-pst-plugin.zip) · [SHA-256](https://github.com/rteoo/outlook-pst/releases/latest/download/outlook-pst-plugin.zip.sha256) |
+| **CLI marketplace registration** | [Marketplace bundle ZIP](https://github.com/rteoo/outlook-pst/releases/latest/download/outlook-pst-marketplace.zip) · [SHA-256](https://github.com/rteoo/outlook-pst/releases/latest/download/outlook-pst-marketplace.zip.sha256) |
 
-For a file-upload dialog, select **`outlook-pst-plugin-v0.1.0.zip`**. It contains
+For a file-upload dialog, select **`outlook-pst-plugin.zip`**. It contains
 one `outlook-pst/` directory with `plugin.json`, `.claude-plugin/plugin.json`,
 `.codex-plugin/plugin.json`, the skill, icon, and documentation. The marketplace
 bundle adds catalogs around that directory and is intended for extracted CLI
 installation; direct-upload dialogs cannot use that outer marketplace layout.
 
-**Version note:** the GitHub release is named `v0.1.0`; its tagged source and
-packaged agent manifests declare plugin version `0.2.0`.
+Release tags and packaged plugin versions now match. Download filenames stay
+the same across releases, so these links always point to the latest version.
 
 To install from the marketplace bundle, with Python and uv already available:
 
 ```powershell
-Expand-Archive ./outlook-pst-v0.1.0.zip -DestinationPath .
-cd outlook-pst-v0.1.0
+Expand-Archive ./outlook-pst-marketplace.zip -DestinationPath ./outlook-pst-marketplace
+cd outlook-pst-marketplace
 codex plugin marketplace add .
 codex plugin add outlook-pst@outlook-pst-local
 ```
@@ -212,10 +211,10 @@ applied. An `applied:` line is printed only after Outlook reports success.
 **One package, four agent runtimes.** Choose a runtime below; the same skill
 and Python CLI run locally in each documented layout.
 
-Build version **0.2.0** from a source checkout:
+Build the checked-out version from source:
 
 ```powershell
-python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
+python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin
 ```
 
 The output contains `outlook-pst/`, a ZIP, and separate marketplace catalogs for
@@ -234,7 +233,7 @@ installation instructions, and the shared skill. OpenClaw imports it as a bundle
 From the source checkout, register the build output and install the plugin:
 
 ```powershell
-codex plugin marketplace add ./dist/plugin-0.2.0
+codex plugin marketplace add ./dist/plugin
 codex plugin add outlook-pst@outlook-pst-local
 ```
 
@@ -247,7 +246,7 @@ without building. Register one source under the `outlook-pst-local` name.
 Load the package for one session:
 
 ```powershell
-claude --plugin-dir ./dist/plugin-0.2.0/outlook-pst
+claude --plugin-dir ./dist/plugin/outlook-pst
 ```
 
 Invoke `/outlook-pst:outlook-pst`. For persistent installation, follow the
@@ -255,7 +254,7 @@ Invoke `/outlook-pst:outlook-pst`. For persistent installation, follow the
 
 ### Use Cursor or OpenClaw
 
-Cursor's Agent CLI accepts `cursor --plugin-dir ./dist/plugin-0.2.0/outlook-pst`.
+Cursor's Agent CLI accepts `cursor --plugin-dir ./dist/plugin/outlook-pst`.
 For the Cursor IDE, follow the [local installation steps](docs/plugin-installation.md#cursor).
 On your OpenClaw Gateway host, install the unpacked package with
 `openclaw plugins install ./outlook-pst`, then inspect it with
@@ -346,7 +345,7 @@ source checkout, run:
 ```powershell
 python -B -W error::ResourceWarning -m unittest discover -s skills/outlook-pst/tests -v
 python -m ruff check --no-cache skills/outlook-pst
-python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
+python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin
 ```
 
 Ruff is optional and must already be installed. Tests use temporary directories
