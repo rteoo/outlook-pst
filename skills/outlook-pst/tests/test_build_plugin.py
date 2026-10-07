@@ -104,7 +104,7 @@ class PluginBuildTests(unittest.TestCase):
                 self.assertTrue((root / metadata["skills"] / "outlook-pst/SKILL.md").is_file())
 
     def test_metadata_drift_and_missing_artwork_fail_before_output(self):
-        project = Path(self.tmp.name) / "project"
+        project = (Path(self.tmp.name) / "project").resolve()
         for relative in (*builder.PACKAGE_FILES, *builder.CATALOG_PATHS):
             path = project / relative
             path.parent.mkdir(parents=True, exist_ok=True)
