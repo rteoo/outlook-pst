@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the local Outlook PST/OST skills plugin from repository source.
 
-Usage: python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.1.0
+Usage: python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
 Cron: none; manual packaging only.
 Dependencies: Python 3.10+ standard library; no mail backends needed.
 Output: a self-contained plugin, ZIP, and separate local marketplace catalog.
@@ -23,63 +23,19 @@ NAME = MANIFEST["name"]
 VERSION = MANIFEST["version"]
 # Explicit allowlist: adding mail fixtures or exports cannot include them accidentally.
 SOURCE_FILES = ("SKILL.md", "scripts/outlook_pst.py", "tests/test_outlook_pst.py", "tests/test_release_safety.py")
-README = """# Outlook PST/OST
+# Package documentation and assets explicitly; never copy whole directories.
+PACKAGE_FILES = (
+    "plugin.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json",
+    ".cursor-plugin/plugin.json", "README.md", "LICENSE", "SECURITY.md",
+    "docs/review.md", "docs/plugin-installation.md",
+    "assets/outlook-pst-icon.png", "assets/README.md",
+)
+CATALOG_PATHS = (
+    ".agents/plugins/marketplace.json",
+    ".claude-plugin/marketplace.json",
+    ".cursor-plugin/marketplace.json",
+)
 
-A local skills plugin for archive search, message reading, evidence export,
-and approved Classic Outlook item changes. This package contains instructions,
-a Python CLI, and fake-backend regression tests. It has no MCP server or hooks.
-
-## Requirements
-
-- Python 3.10+ and uv, already available on the execution host.
-- libpff-python for archive reads; pywin32 and Classic Outlook on Windows for
-  live access or reads of attached files that Outlook holds open.
-- New Outlook does not provide the required COM API.
-
-Dependencies are resolved per run by uv using the commands in SKILL.md; the
-plugin does not install them. Obtain authorization for missing dependencies.
-The fake-backend tests and CLI --help need only Python's standard library.
-
-## Install locally
-
-The builder writes a separate `.agents/plugins/marketplace.json` beside the
-plugin folder. Register the builder's output directory in PowerShell:
-
-```powershell
-codex plugin marketplace add 'C:\\absolute\\path\\to\\build-output'
-codex plugin add outlook-pst@outlook-pst-local
-```
-
-Then start a new chat and select Outlook PST/OST. Registration and installation
-change the user's local Codex configuration; run them only when authorized.
-No account upload or publication is required for this local package.
-
-## Verify after installation
-
-Resolve the installed skill's directory, then run:
-
-```powershell
-python -B -W error::ResourceWarning -m unittest discover -s .\\skills\\outlook-pst\\tests
-python -B .\\skills\\outlook-pst\\scripts\\outlook_pst.py --help
-```
-
-Run those commands from the plugin root. They never access a mailbox.
-For live validation use an approved scratch PST. Mailbox changes require a
-dry-run preview and approval of the exact items; Exchange edits sync to devices.
-Attaching or detaching a PST changes the Outlook profile and needs approval.
-Use `--via pff` for strict read-only evidence access; Outlook attachment can
-modify a PST. Keep mail and exports private in an approved local destination.
-
-## Package format
-
-`plugin.json` follows Agent Plugins 1.0; `.codex-plugin/plugin.json` provides
-the compatibility overlay. Both use the same identity, version, and listing.
-Only explicitly listed source files are packaged; no mail, attachments,
-credentials, caches, dependency directories, or machine-specific paths.
-
-Format and local installation reference:
-https://developers.openai.com/plugins/build/plugins
-"""
 
 
 def json_bytes(value: dict) -> bytes:
@@ -87,8 +43,8 @@ def json_bytes(value: dict) -> bytes:
 
 
 def package_files(source: Path) -> dict[str, bytes]:
-    files = {"README.md": README.encode("utf-8")}
-    for relative in ("plugin.json", ".codex-plugin/plugin.json", "LICENSE"):
+    files = {}
+    for relative in PACKAGE_FILES:
         path = PROJECT_ROOT / relative
         if not path.is_file() or path.is_symlink() or path.resolve() != PROJECT_ROOT / relative:
             raise ValueError(f"metadata must be a contained regular file: {relative}")
@@ -101,6 +57,19 @@ def package_files(source: Path) -> dict[str, bytes]:
     interface = portable["extensions"]["com.openai"]["interface"]
     if interface != overlay["interface"] or len(interface["shortDescription"]) > 30:
         raise ValueError("plugin listing mismatch or subtitle longer than 30 characters")
+    for client in ("claude", "cursor"):
+        metadata = json.loads(files[f".{client}-plugin/plugin.json"])
+        for key in ("name", "version", "description", "author", "license", "repository"):
+            if portable.get(key) != metadata.get(key):
+                raise ValueError(f"{client} manifest mismatch: {key}")
+        if metadata.get("skills") != "./skills/":
+            raise ValueError(f"{client} skills must resolve to ./skills/")
+    for value in (interface.get("composerIcon"), interface.get("logo"),
+                  json.loads(files[".cursor-plugin/plugin.json"]).get("logo")):
+        if not isinstance(value, str) or value not in (
+            "./assets/outlook-pst-icon.png", "assets/outlook-pst-icon.png"
+        ) or value.removeprefix("./") not in files:
+            raise ValueError("plugin icon must reference the packaged asset")
     if portable["name"] != NAME or portable["version"] != VERSION:
         raise ValueError("plugin metadata changed during packaging; run the builder again")
     for relative in SOURCE_FILES:
@@ -111,8 +80,34 @@ def package_files(source: Path) -> dict[str, bytes]:
     return files
 
 
+def marketplace_files(plugin_path: str) -> dict[str, bytes]:
+    catalogs = {}
+    for relative in CATALOG_PATHS:
+        path = PROJECT_ROOT / relative
+        if not path.is_file() or path.is_symlink() or path.resolve() != PROJECT_ROOT / relative:
+            raise ValueError(f"catalog must be a contained regular file: {relative}")
+        catalog = json.loads(path.read_bytes())
+        entries = catalog.get("plugins", [])
+        if catalog.get("name") != "outlook-pst-local" or len(entries) != 1:
+            raise ValueError(f"invalid single-plugin catalog: {relative}")
+        entry = entries[0]
+        if entry.get("name") != NAME:
+            raise ValueError(f"catalog plugin mismatch: {relative}")
+        if relative.startswith(".agents/"):
+            if entry.get("source") != {"source": "local", "path": "./"}:
+                raise ValueError("repository catalog must point to its root")
+            entry["source"]["path"] = plugin_path
+        else:
+            if entry.get("source") != "./" or entry.get("version") != VERSION:
+                raise ValueError(f"catalog source or version mismatch: {relative}")
+            entry["source"] = plugin_path
+        catalogs[relative] = json_bytes(catalog)
+    return catalogs
+
+
 def build(out: Path, source: Path = SOURCE) -> dict:
     files = package_files(source)  # Validate all inputs before creating output.
+    catalogs = marketplace_files(f"./{NAME}")
     out = out.resolve()
     if out == PROJECT_ROOT or out == SOURCE or SOURCE in out.parents:
         raise ValueError("output must be outside the skill source and cannot be the project root")
@@ -124,18 +119,11 @@ def build(out: Path, source: Path = SOURCE) -> dict:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
-    catalog = out / ".agents" / "plugins" / "marketplace.json"
-    catalog.parent.mkdir(parents=True, exist_ok=True)
-    catalog.write_bytes(json_bytes({
-        "name": "outlook-pst-local",
-        "interface": {"displayName": "Local Outlook plugins"},
-        "plugins": [{
-            "name": NAME,
-            "source": {"source": "local", "path": f"./{NAME}"},
-            "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
-            "category": "Productivity",
-        }],
-    }))
+    for relative, payload in catalogs.items():
+        path = out / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    catalog = out / CATALOG_PATHS[0]
     archive = out / f"{NAME}-{VERSION}.zip"
     with ZipFile(archive, "x", compression=ZIP_DEFLATED) as bundle:
         for relative, payload in sorted(files.items()):
@@ -147,6 +135,8 @@ def build(out: Path, source: Path = SOURCE) -> dict:
         if bundle.testzip() is not None:
             raise ValueError("archive integrity check failed")
     return {"plugin": str(root), "archive": str(archive), "marketplace": str(catalog),
+            "marketplaces": {client: str(out / relative)
+                             for client, relative in zip(("codex", "claude", "cursor"), CATALOG_PATHS, strict=True)},
             "files": len(files), "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()}
 
 

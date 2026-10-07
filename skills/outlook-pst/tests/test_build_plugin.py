@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
 SOURCE = Path(__file__).resolve().parents[1]
@@ -48,7 +49,12 @@ class PluginBuildTests(unittest.TestCase):
             self.assertEqual(set(archive.namelist()), expected)
             self.assertIsNone(archive.testzip())
             self.assertIn("outlook-pst/.codex-plugin/plugin.json", archive.namelist())
-            self.assertEqual(len(archive.namelist()), 8)
+            self.assertEqual(len(archive.namelist()), 15)
+            for relative in (".claude-plugin/plugin.json", ".cursor-plugin/plugin.json",
+                             "docs/plugin-installation.md", "assets/outlook-pst-icon.png",
+                             "README.md", "SECURITY.md", "docs/review.md"):
+                self.assertIn(f"outlook-pst/{relative}", archive.namelist())
+            self.assertFalse(any(name.endswith("marketplace.json") for name in archive.namelist()))
         # Unrelated source files, including sensitive artifacts, never get copied.
         source = Path(self.tmp.name) / "source"
         for relative in builder.SOURCE_FILES:
@@ -78,9 +84,64 @@ class PluginBuildTests(unittest.TestCase):
         self.assertIn("relative to this `SKILL.md`", skill)
         self.assertIn("--apply", skill)
 
+    def test_branding_documentation_and_all_client_catalogs_survive_relocation(self):
+        result = builder.build(self.out)
+        root = Path(result["plugin"])
+        self.assertEqual((root / "README.md").read_bytes(),
+                         (builder.PROJECT_ROOT / "README.md").read_bytes())
+        icon = (root / "assets/outlook-pst-icon.png").read_bytes()
+        self.assertEqual(icon[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(icon, (builder.PROJECT_ROOT / "assets/outlook-pst-icon.png").read_bytes())
+        self.assertEqual(set(result["marketplaces"]), {"codex", "claude", "cursor"})
+        for client, path in result["marketplaces"].items():
+            catalog = json.loads(Path(path).read_bytes())
+            entry = catalog["plugins"][0]
+            source = entry["source"]["path"] if client == "codex" else entry["source"]
+            self.assertEqual((self.out / source).resolve(), root)
+            if client != "codex":
+                metadata = json.loads((root / f".{client}-plugin/plugin.json").read_bytes())
+                self.assertEqual(entry["version"], metadata["version"])
+                self.assertTrue((root / metadata["skills"] / "outlook-pst/SKILL.md").is_file())
+
+    def test_metadata_drift_and_missing_artwork_fail_before_output(self):
+        project = Path(self.tmp.name) / "project"
+        for relative in (*builder.PACKAGE_FILES, *builder.CATALOG_PATHS):
+            path = project / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((builder.PROJECT_ROOT / relative).read_bytes())
+        metadata_path = project / ".claude-plugin/plugin.json"
+        metadata = json.loads(metadata_path.read_bytes())
+        metadata["version"] = "999.0.0"
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        with patch.object(builder, "PROJECT_ROOT", project):
+            with self.assertRaisesRegex(ValueError, "claude manifest mismatch: version"):
+                builder.build(self.out)
+        self.assertFalse(self.out.exists())
+        metadata["version"] = builder.VERSION
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        with patch.object(builder, "PROJECT_ROOT", project), patch.object(
+            builder, "PACKAGE_FILES", tuple(p for p in builder.PACKAGE_FILES if not p.endswith(".png"))
+        ):
+            with self.assertRaisesRegex(ValueError, "packaged asset"):
+                builder.build(self.out)
+        self.assertFalse(self.out.exists())
+
+    def test_catalog_drift_fails_before_output(self):
+        catalog = json.loads((builder.PROJECT_ROOT / builder.CATALOG_PATHS[1]).read_bytes())
+        catalog["plugins"][0]["version"] = "999.0.0"
+        original = Path.read_bytes
+        def read_bytes(path):
+            if path == builder.PROJECT_ROOT / builder.CATALOG_PATHS[1]:
+                return json.dumps(catalog).encode("utf-8")
+            return original(path)
+        with patch.object(Path, "read_bytes", read_bytes):
+            with self.assertRaisesRegex(ValueError, "catalog source or version mismatch"):
+                builder.build(self.out)
+        self.assertFalse(self.out.exists())
+
     def test_refuses_nonempty_output_without_changing_existing_data(self):
         builder.build(self.out)
-        archive = self.out / "outlook-pst-0.1.0.zip"
+        archive = self.out / f"outlook-pst-{builder.VERSION}.zip"
         original = archive.read_bytes()
         with self.assertRaisesRegex(ValueError, "new or empty"):
             builder.build(self.out)

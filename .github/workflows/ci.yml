@@ -29,4 +29,4 @@ jobs:
       - name: CLI help
         run: python -B skills/outlook-pst/scripts/outlook_pst.py --help
       - name: Build self-contained plugin
-        run: python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.1.0
+        run: python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
