@@ -44,6 +44,37 @@ for what has been verified.
 - **Use it with your agent:** one package for Codex, Claude Code, Cursor, and
   OpenClaw, with the same Python CLI and local archive access.
 
+## Download the plugin
+
+Get the **[packaged plugin ZIP](https://github.com/rteoo/outlook-pst/releases/download/v0.1.0/outlook-pst-v0.1.0.zip)**
+from [release v0.1.0](https://github.com/rteoo/outlook-pst/releases/tag/v0.1.0).
+A [SHA-256 checksum](https://github.com/rteoo/outlook-pst/releases/download/v0.1.0/outlook-pst-v0.1.0.zip.sha256)
+is included for download integrity checks. The ZIP contains the plugin, icon,
+documentation, and all three marketplace catalogs; no build step is needed.
+
+**Version note:** the GitHub release is named `v0.1.0`; its tagged source and
+packaged agent manifests declare plugin version `0.2.0`.
+
+With Python and uv already available, extract the download and register it:
+
+```powershell
+Expand-Archive ./outlook-pst-v0.1.0.zip -DestinationPath .
+cd outlook-pst-v0.1.0
+codex plugin marketplace add .
+codex plugin add outlook-pst@outlook-pst-local
+```
+
+For other runtimes, use the inner `outlook-pst/` directory:
+
+- Claude Code: `claude --plugin-dir ./outlook-pst`.
+- Cursor Agent CLI: `cursor --plugin-dir ./outlook-pst`.
+- OpenClaw: on the Gateway host, `openclaw plugins install ./outlook-pst`.
+
+Read [the installation guide](docs/plugin-installation.md) for requirements,
+persistent installation, IDE setup, and verification limits. Archive dependencies
+still need to be available or approved before downloading. Installation does not
+open mail or change your Outlook profile.
+
 ## Quick start
 
 You need **Python 3.10+**. The examples use an existing **uv** installation to
