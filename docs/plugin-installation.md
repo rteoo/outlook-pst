@@ -54,10 +54,9 @@ For **Add plugin** or **Upload local plugin**, use the release asset
 The builder's `outlook-pst-0.2.1.zip` has the same standalone layout.
 
 The separate release asset `outlook-pst-marketplace.zip` is a marketplace bundle. It
-adds an outer directory containing catalogs and the plugin directory beneath it.
-Use it after extraction for CLI marketplace registration. Uploading that outer
-bundle as a plugin hides `.claude-plugin/plugin.json` one directory too deep and
-can produce a missing-manifest error.
+contains marketplace catalogs alongside the `outlook-pst/` plugin directory.
+Use it after extraction for CLI marketplace registration. For direct plugin
+uploads, use the standalone archive so the importer sees a single plugin root.
 
 Both release assets are built from the same release commit. Starting with
 v0.2.1, release tags match the packaged plugin version. See the README for
