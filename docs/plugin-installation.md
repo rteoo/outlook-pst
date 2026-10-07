@@ -181,10 +181,17 @@ Checked on Windows on 2026-10-07:
 | Offline regression suite, Python 3.14 | 54 tests passed, including relocated CLI execution and packaged tests |
 | Ruff | Passed |
 | Agent Plugins 1.0 schema | Repository and packaged root manifests passed |
-| Claude Code 2.1.287 strict validator | Packaged plugin and both source/build marketplace catalogs passed |
-| Codex 0.159.0 CLI | Commands confirmed; registration, installation, and session loading remain unverified |
+| Claude Code 2.1.287 | Strict package/catalog validation passed; isolated marketplace registration and installation passed; component inventory reports exactly one `outlook-pst` skill |
+| Codex 0.159.0 CLI | Isolated marketplace registration and installation passed; plugin inventory reports version 0.2.0 installed and enabled; session execution remains unverified |
 | Cursor Agent CLI 2026.08.11-e8db854 | Session-only `--plugin-dir` option confirmed; skill loading and IDE installation remain unverified |
 | OpenClaw | No local executable available; bundle detection and Gateway loading remain unverified |
 
-Runtime installation tests require approval. Package validation does not authorize
-changes to existing runtime configuration, mailbox access, or public submission.
+The approved Codex/Claude installation checks used temporary configuration
+directories through `CODEX_HOME` and `CLAUDE_CONFIG_DIR`. Both directories were
+removed afterward. No model session, archive, or mailbox was opened. Codex declined
+to create PATH helper aliases under its temporary home, while installation and
+inventory checks completed successfully.
+
+Session execution, Cursor loading, and OpenClaw Gateway loading still need separate
+verification. Package validation does not authorize changes to existing runtime
+configuration, mailbox access, or public submission.

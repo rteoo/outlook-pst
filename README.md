@@ -248,8 +248,10 @@ them before relying on an export. See [SECURITY.md](SECURITY.md).
 Tests use synthetic libpff and COM backends. CI covers Windows, Linux, and macOS
 on Python 3.10 and 3.14. Native libpff loading and invalid-file rejection were
 checked on Windows; **successful real-archive reads, live Outlook changes, and
-agent session loading remain unverified**. Packaged Claude metadata passes its
-strict validator; see [plugin verification status](docs/plugin-installation.md#verification-status)
+agent session execution remain unverified**. Codex and Claude marketplace
+registration and installation passed in isolated temporary configuration
+directories; Claude detected the skill, and Codex listed it as installed and
+enabled. See [plugin verification status](docs/plugin-installation.md#verification-status)
 and [the review](docs/review.md).
 
 Large live mailboxes can be slow to scan. MIME assembly holds attachments in
