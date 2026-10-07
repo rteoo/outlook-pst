@@ -8,7 +8,7 @@
       "name": "outlook-pst",
       "source": "./",
       "description": "Read, search, export, and manage local Outlook PST/OST mail.",
-      "version": "0.2.0"
+      "version": "0.2.1"
     }
   ]
 }
