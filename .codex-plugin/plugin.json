@@ -1,8 +1,10 @@
 {
   "name": "outlook-pst",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read, search, export, and manage local Outlook PST/OST mail.",
-  "author": { "name": "rteoo" },
+  "author": {
+    "name": "rteoo"
+  },
   "license": "MIT",
   "repository": "https://github.com/rteoo/outlook-pst",
   "skills": "./skills/",
@@ -12,11 +14,16 @@
     "longDescription": "Read and search PST/OST archives, export messages with hash manifests, and manage Classic Outlook items through previewed, approved changes. Local Python execution is required; live Outlook access requires Windows.",
     "developerName": "rteoo",
     "category": "Productivity",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "defaultPrompt": [
       "Search my local PST archive for messages matching a sender and date range.",
       "Export matching messages to an approved local folder with a hash manifest.",
       "Preview changes to selected Classic Outlook messages before applying them."
-    ]
+    ],
+    "composerIcon": "./assets/outlook-pst-icon.png",
+    "logo": "./assets/outlook-pst-icon.png"
   }
 }

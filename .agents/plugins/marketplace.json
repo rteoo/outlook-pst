@@ -1,0 +1,20 @@
+{
+  "name": "outlook-pst-local",
+  "interface": {
+    "displayName": "Local Outlook plugins"
+  },
+  "plugins": [
+    {
+      "name": "outlook-pst",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

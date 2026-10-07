@@ -1,0 +1,15 @@
+{
+  "name": "outlook-pst-local",
+  "owner": {
+    "name": "rteoo"
+  },
+  "plugins": [
+    {
+      "name": "outlook-pst",
+      "source": "./",
+      "description": "Read, search, export, and manage local Outlook PST/OST mail.",
+      "version": "0.2.0"
+    }
+  ],
+  "description": "Local Outlook PST/OST archive tools and approved Classic Outlook changes."
+}

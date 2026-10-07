@@ -20,8 +20,10 @@ Outlook PST helps you browse folders, find messages by sender or date, and
 export the results. On Windows, you can also choose a mailbox and preview
 changes before applying them.
 
-Use it from the command line or as a local skills plugin for Codex. Archive
-commands work with files on your computer and need no mail-service sign-in.
+Use it from the command line or with **Codex, Claude Code, Cursor, or OpenClaw**.
+Archive commands work with files on your computer and need no mail-service
+sign-in. One plugin package includes the shared skill, Python CLI, and project
+artwork.
 This is an **early release**; see [platform status and limitations](#platform-status-and-limitations)
 for what has been verified.
 
@@ -39,8 +41,8 @@ for what has been verified.
   with file sizes, MD5, and SHA-256 hashes.
 - **Preview mailbox changes:** move mail, edit text, mark read/unread, add
   categories, or move items to Deleted Items. Item changes require `--apply`.
-- **Use it with Codex:** build a self-contained local plugin with example
-  prompts and the same Python CLI.
+- **Use it with your agent:** one package for Codex, Claude Code, Cursor, and
+  OpenClaw, with the same Python CLI and local archive access.
 
 ## Quick start
 
@@ -166,17 +168,68 @@ and RTF bodies are skipped with a warning to preserve formatting.
 are not transactional: if a later operation fails, earlier ones may remain
 applied. An `applied:` line is printed only after Outlook reports success.
 
-## Use it as a Codex plugin
+## Use it with your agent
 
-Build the local package, then register and install it with the Codex CLI:
+**One package, four agent runtimes.** Choose a runtime below; the same skill
+and Python CLI run locally in each documented layout.
+
+Build version **0.2.0** from a source checkout:
 
 ```powershell
-python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.1.0
-codex plugin marketplace add ./dist/plugin-0.1.0
+python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
+```
+
+The output contains `outlook-pst/`, a ZIP, and separate marketplace catalogs for
+Codex, Claude Code, and Cursor. The package includes this README, the icon,
+installation instructions, and the shared skill. OpenClaw imports it as a bundle.
+
+| Runtime | Package format | Verification status |
+| --- | --- | --- |
+| **Codex** | Agent Plugins manifest plus compatibility overlay | Installed and enabled in an isolated configuration |
+| **Claude Code** | Claude manifest pointing to the shared skill | Installed; component inventory detected the skill |
+| **Cursor** | Portable manifest plus Cursor metadata and logo | CLI loading option confirmed; skill loading unverified |
+| **OpenClaw** | Imports the package as a compatible bundle | Documented layout; Gateway loading unverified |
+
+### Install with Codex
+
+From the source checkout, register the build output and install the plugin:
+
+```powershell
+codex plugin marketplace add ./dist/plugin-0.2.0
 codex plugin add outlook-pst@outlook-pst-local
 ```
 
-Start a new chat and select **Outlook PST/OST**. Try prompts such as:
+Start a new chat and select **Outlook PST/OST**. The repository also includes a
+marketplace catalog, so `codex plugin marketplace add .` can register the checkout
+without building. Register one source under the `outlook-pst-local` name.
+
+### Try with Claude Code
+
+Load the package for one session:
+
+```powershell
+claude --plugin-dir ./dist/plugin-0.2.0/outlook-pst
+```
+
+Invoke `/outlook-pst:outlook-pst`. For persistent installation, follow the
+[Claude Code instructions](docs/plugin-installation.md#claude-code).
+
+### Use Cursor or OpenClaw
+
+Cursor's Agent CLI accepts `cursor --plugin-dir ./dist/plugin-0.2.0/outlook-pst`.
+For the Cursor IDE, follow the [local installation steps](docs/plugin-installation.md#cursor).
+On your OpenClaw Gateway host, install the unpacked package with
+`openclaw plugins install ./outlook-pst`, then inspect it with
+`openclaw plugins inspect outlook-pst`. See [the OpenClaw guide](docs/plugin-installation.md#openclaw)
+for detection and session details.
+
+See **[the installation guide](docs/plugin-installation.md)** for full commands,
+reload steps, format details, and verification limits. Installer commands change
+local runtime configuration; building the package does not install anything.
+The plugin requires an execution host with access to your archives. Installing
+it in a cloud session does not grant access to files on your computer.
+
+Try prompts such as:
 
 > Find messages about invoices in my local PST archive from January onward.
 >
@@ -184,14 +237,8 @@ Start a new chat and select **Outlook PST/OST**. Try prompts such as:
 >
 > Show me a preview of marking these Outlook messages as read.
 
-The builder produces a self-contained plugin, ZIP, and separate marketplace
-catalog. It includes only allowlisted source files and refuses nonempty output
-directories. Installation changes local Codex configuration; the builder itself
-does not install anything. The plugin needs a local execution host to access
-files and processes.
-
-See the [OpenAI packaging guide](https://developers.openai.com/plugins/build/plugins)
-for the package format and installation workflow.
+The builder includes only allowlisted files and refuses nonempty output
+directories. No mail, exports, credentials, or dependencies are packaged.
 
 ## Command reference
 
@@ -239,7 +286,11 @@ them before relying on an export. See [SECURITY.md](SECURITY.md).
 Tests use synthetic libpff and COM backends. CI covers Windows, Linux, and macOS
 on Python 3.10 and 3.14. Native libpff loading and invalid-file rejection were
 checked on Windows; **successful real-archive reads, live Outlook changes, and
-desktop plugin loading remain unverified**. See [the review](docs/review.md).
+agent session execution remain unverified**. Codex and Claude marketplace
+registration and installation passed in isolated temporary configuration
+directories; Claude detected the skill, and Codex listed it as installed and
+enabled. See [plugin verification status](docs/plugin-installation.md#verification-status)
+and [the review](docs/review.md).
 
 Large live mailboxes can be slow to scan. MIME assembly holds attachments in
 memory, and RTF extraction is intentionally focused rather than a full RTF
@@ -250,12 +301,13 @@ directory; original paths remain in the manifest.
 
 ## Develop and build
 
-Source and tests live under [skills/outlook-pst](skills/outlook-pst). Run:
+Source and tests live under [skills/outlook-pst](skills/outlook-pst). From a
+source checkout, run:
 
 ```powershell
 python -B -W error::ResourceWarning -m unittest discover -s skills/outlook-pst/tests -v
 python -m ruff check --no-cache skills/outlook-pst
-python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.1.0
+python -B skills/outlook-pst/scripts/build_plugin.py --out dist/plugin-0.2.0
 ```
 
 Ruff is optional and must already be installed. Tests use temporary directories

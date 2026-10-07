@@ -1,0 +1,11 @@
+{
+  "name": "outlook-pst",
+  "version": "0.2.0",
+  "description": "Read, search, export, and manage local Outlook PST/OST mail.",
+  "author": {
+    "name": "rteoo"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/rteoo/outlook-pst",
+  "skills": "./skills/"
+}
