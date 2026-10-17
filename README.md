@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/rteoo/outlook-pst/actions/workflows/ci.yml"><img src="https://github.com/rteoo/outlook-pst/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/rteoo/outlook-pst/tags"><img src="https://img.shields.io/github/v/tag/rteoo/outlook-pst?label=stable" alt="Stable tag"></a>
   <a href="docs/review.md"><img src="https://img.shields.io/badge/status-early%20release-amber" alt="Early release"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10%2B-blue" alt="Python 3.10 or later"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
