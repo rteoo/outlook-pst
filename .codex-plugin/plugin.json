@@ -3,16 +3,34 @@
   "version": "0.3.0",
   "description": "Read, search, export, and manage local Outlook PST/OST mail.",
   "author": {
-    "name": "rteoo"
+    "name": "RODRIGO TEODORO ALVES"
   },
   "license": "MIT",
   "repository": "https://github.com/rteoo/outlook-pst",
   "skills": "./skills/",
+  "requires_local_executor": true,
+  "review": {
+    "commerce": false,
+    "commerce_description": "This plugin does not sell products or process payments.",
+    "prompts": [
+      "Search my local PST archive for messages matching a sender and date range.",
+      "Export matching messages to an approved local folder with a hash manifest.",
+      "Preview changes to selected Classic Outlook messages before applying them."
+    ]
+  },
+  "publication": {
+    "countries": [],
+    "release_notes": "Read and search local PST/OST archives, export messages with integrity hashes, and preview approved Classic Outlook changes. This release includes the project archive-search icon and marks the plugin as requiring desktop execution."
+  },
   "interface": {
     "displayName": "Outlook PST/OST",
     "shortDescription": "Search local Outlook mail",
     "longDescription": "Read and search PST/OST archives, export messages with hash manifests, and manage Classic Outlook items through previewed, approved changes. Local Python execution is required; live Outlook access requires Windows.",
-    "developerName": "rteoo",
+    "developerName": "RODRIGO TEODORO ALVES",
+    "websiteURL": "https://github.com/rteoo/outlook-pst",
+    "supportURL": "https://github.com/rteoo/outlook-pst/issues",
+    "privacyPolicyURL": "https://github.com/rteoo/outlook-pst/blob/917dd65729b88749f882b874067d0cab0c91a4f3/docs/privacy-policy.md",
+    "termsOfServiceURL": "https://github.com/rteoo/outlook-pst/blob/917dd65729b88749f882b874067d0cab0c91a4f3/docs/terms-of-use.md",
     "category": "Productivity",
     "capabilities": [
       "Read",
