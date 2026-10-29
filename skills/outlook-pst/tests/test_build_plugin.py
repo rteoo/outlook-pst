@@ -84,6 +84,19 @@ class PluginBuildTests(unittest.TestCase):
         self.assertIn("relative to this `SKILL.md`", skill)
         self.assertIn("--apply", skill)
 
+    def test_desktop_requirement_and_review_metadata_survive_packaging(self):
+        result = builder.build(self.out)
+        with ZipFile(result["archive"]) as archive:
+            portable = json.loads(archive.read("outlook-pst/plugin.json"))
+            overlay = json.loads(archive.read("outlook-pst/.codex-plugin/plugin.json"))
+        metadata = portable["extensions"]["com.openai"]
+        self.assertIs(metadata["requires_local_executor"], True)
+        self.assertIs(overlay["requires_local_executor"], True)
+        self.assertEqual(metadata["review"], overlay["review"])
+        self.assertEqual(metadata["publication"], overlay["publication"])
+        self.assertEqual(metadata["review"]["prompts"], metadata["interface"]["defaultPrompt"])
+        self.assertTrue(metadata["publication"]["release_notes"].strip())
+
     def test_branding_documentation_and_all_client_catalogs_survive_relocation(self):
         result = builder.build(self.out)
         root = Path(result["plugin"])

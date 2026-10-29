@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "description": "Read, search, export, and manage local Outlook PST/OST mail.",
   "author": {
-    "name": "rteoo"
+    "name": "RODRIGO TEODORO ALVES"
   },
   "license": "MIT",
   "repository": "https://github.com/rteoo/outlook-pst",
