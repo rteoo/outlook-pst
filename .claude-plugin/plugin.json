@@ -1,6 +1,6 @@
 {
   "name": "outlook-pst",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Read, search, export, and manage local Outlook PST/OST mail.",
   "author": {
     "name": "RODRIGO TEODORO ALVES"
