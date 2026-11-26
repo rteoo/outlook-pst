@@ -1,17 +1,17 @@
 # Project artwork
 
-`outlook-pst-icon.svg` is the icon's source: an envelope in an archive tray with
-a search lens, on a rounded navy tile. `outlook-pst-icon.png` is its 1024-pixel
+`outlook-pst-icon.svg` is the icon's source: a mail envelope with a search lens
+at its corner, on a neutral ink tile. `outlook-pst-icon.png` is its 1024-pixel
 render, used by the root README and the plugin manifests. Its transparent outer
 margin works on light and dark backgrounds. No Microsoft or Outlook mark is used.
 
 ## Design
 
-The icon follows the personal-project icon family: a navy tile graded through
-the Teô Personal Design System's navy-500, navy-600 and navy-900, a pictogram in
-its paper-100 to navy-300 gradient, and a single orange-500 accent, here the
-search lens. The SVG was drawn by hand on 2026-10-16, replacing the earlier
-generated raster.
+The icon follows the personal-plugin icon family, built on the Teô Design
+System 3.2.0 mark (`T.`, a letter with an amber full stop): a flat `#0A0A0A` ink
+tile, a 24-unit outline pictogram in `#F5F5F5` with rounded caps and joins, and a
+single amber `#FE9A00` accent, here the search lens. No gradients, sheen, or
+glow. Redrawn on 2026-11-26, replacing the navy-gradient version.
 
 ## Regenerating the PNG
 
